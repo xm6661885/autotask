@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}设置 - AutoTask{% endblock %}
+{% block body_class %}settings-page{% endblock %}
+{% block content %}
+<div class="card settings-card">
+  <h2>设置</h2>
+  <div class="settings-info">
+    <p class="settings-row settings-row-config"><span class="settings-icon" aria-hidden="true"></span><span class="muted mono">配置文件: {{ cfg_path }}</span></p>
+    <p class="settings-row settings-row-scripts"><span class="settings-icon" aria-hidden="true"></span><span class="muted mono">脚本目录: {{ scripts_dir }}</span></p>
+    <p class="settings-row settings-row-tz"><span class="settings-icon" aria-hidden="true"></span><span class="muted">Cron 时区: <span class="mono">{{ system_timezone }}</span>（跟随运行服务的系统时区）</span></p>
+  </div>
+  <form method="post" class="settings-form">
+    <label for="new-password">修改密码</label>
+    <input id="new-password" type="password" name="new_password" placeholder="留空则不修改">
+    <div class="settings-actions">
+      <button class="btn btn-primary" type="submit">保存</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

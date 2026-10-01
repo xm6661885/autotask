@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#fff3f8">
+<script>
+try { if (localStorage.getItem('autotask:language') === 'en') document.documentElement.lang = 'en'; } catch (ignore) {}
+// Apply the saved day/night theme before first paint; without a saved
+// choice, follow the operating system.
+(function () {
+  var theme = null;
+  try { theme = localStorage.getItem('autotask:theme'); } catch (ignore) {}
+  if (theme !== 'dark' && theme !== 'light') theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#191a20' : '#fff3f8';
+})();
+</script>
+<title>{% block title %}AutoTask{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect x='2' y='2' width='36' height='36' rx='11' fill='%23fbc0cf'/%3E%3Cg fill='none' stroke='%234f1d31' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M26.4 13.3A10 10 0 1 1 18.3 11.2M15.8 8.6L19.3 11l-2.5 3.5M20 16v5l3.6 2.3'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=asset_version) }}">
+<script>
+// Page scripts register timers and window listeners against this signal; the
+// in-app navigator aborts it before swapping in the next page.
+window.AutoTaskUI = { pageController: new AbortController() };
+</script>
+</head>
+<body class="{% block body_class %}{% endblock %}">
+<div class="bg-decor" aria-hidden="true"><span class="blob blob-a"></span><span class="blob blob-b"></span><span class="blob blob-c"></span></div>
+<header class="site-header">
+  <a class="brand" href="{{ url_for('index') if session.get('authed') else url_for('login') }}">
+    <svg class="brand-logo" viewBox="0 0 40 40" aria-hidden="true">
+      <rect x="2" y="2" width="36" height="36" rx="11" fill="#fbc0cf"/>
+      <g fill="none" stroke="#4f1d31" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <g class="brand-loop"><path d="M26.4 13.3A10 10 0 1 1 18.3 11.2"/><path d="M15.8 8.6L19.3 11l-2.5 3.5"/></g>
+        <path d="M20 16v5l3.6 2.3" stroke-width="2.6"/>
+      </g>
+      <path class="brand-spark" d="M30.5 4.5q.7 3.3 4 4q-3.3.7-4 4q-.7-3.3-4-4q3.3-.7 4-4z" fill="#ffe08a" stroke="#fff" stroke-width=".8" stroke-linejoin="round"/>
+    </svg>
+    <span class="brand-text">AutoTask</span>
+  </a>
+  <div class="header-tools">
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="切换为夜间模式" title="切换为夜间模式">
+      <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z" fill="currentColor"/></svg>
+      <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    </button>
+    <button class="language-toggle" type="button" data-language-toggle aria-label="切换为英文"><span data-language-label>English</span></button>
+  </div>
+  {% if session.get('authed') %}
+  <button class="nav-toggle" type="button" aria-label="打开导航菜单" aria-controls="primary-nav" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
+  <nav id="primary-nav" class="site-nav" aria-label="主导航">
+    {% set endpoint = request.endpoint or '' %}
+    <a class="nav-link nav-home {{ 'is-active' if endpoint in ['index', 'task_runs', 'run_log'] else '' }}" href="{{ url_for('index') }}"{% if endpoint in ['index', 'task_runs', 'run_log'] %} aria-current="page"{% endif %}>任务中心</a>
+    <a class="nav-link nav-new {{ 'is-active' if endpoint in ['new_task', 'edit_task'] else '' }}" href="{{ url_for('new_task') }}"{% if endpoint in ['new_task', 'edit_task'] %} aria-current="page"{% endif %}>新建任务</a>
+    <a class="nav-link nav-settings {{ 'is-active' if endpoint == 'settings' else '' }}" href="{{ url_for('settings') }}"{% if endpoint == 'settings' %} aria-current="page"{% endif %}>设置</a>
+    <a class="nav-link nav-link-muted nav-logout" data-hard-nav href="{{ url_for('logout') }}">退出</a>
+  </nav>
+  {% endif %}
+</header>
+<main>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, msg in messages %}
+      <div class="flash {{ category }}" role="status"><span class="flash-icon" aria-hidden="true"></span><span class="flash-text">{{ msg }}</span><button class="flash-close" type="button" aria-label="关闭">×</button></div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+<div class="toast-region" aria-live="polite" aria-atomic="true"></div>
+<dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-dialog-message">
+  <form method="dialog" class="confirm-dialog-body">
+    <div class="confirm-dialog-face" aria-hidden="true">
+      <svg viewBox="0 0 64 64"><circle cx="32" cy="34" r="24" fill="#f8ccdf"/><circle cx="24" cy="32" r="3" fill="#4a3530"/><circle cx="40" cy="32" r="3" fill="#4a3530"/><ellipse cx="18" cy="39" rx="4" ry="2.4" fill="#ff8a8a" opacity=".5"/><ellipse cx="46" cy="39" rx="4" ry="2.4" fill="#ff8a8a" opacity=".5"/><path d="M27 43q5 -3.5 10 0" stroke="#4a3530" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M50 12q2 5 0 8a3 3 0 1 1-4-3q2-2 4-5z" fill="#8fd3f4"/></svg>
+    </div>
+    <p id="confirm-dialog-message" class="confirm-dialog-message"></p>
+    <div class="confirm-dialog-actions">
+      <button class="btn" value="cancel" type="submit">取消</button>
+      <button class="btn btn-danger-solid" value="confirm" type="submit">确认</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function () {
+  window.AutoTaskUI = window.AutoTaskUI || {};
+
+  // Flash banners: dismissible, and success messages fade out by themselves.
+  window.AutoTaskUI.initFlashes = function (root) {
+    root.querySelectorAll('.flash').forEach(function (flash) {
+      function dismiss() {
+        flash.classList.add('is-leaving');
+        window.setTimeout(function () { flash.remove(); }, 260);
+      }
+      var close = flash.querySelector('.flash-close');
+      if (close) close.addEventListener('click', dismiss);
+      if (flash.classList.contains('ok')) window.setTimeout(dismiss, 5000);
+    });
+  };
+  window.AutoTaskUI.initFlashes(document);
+
+  // Day/night toggle. An explicit choice is remembered; until then the page
+  // keeps following the operating system's appearance setting.
+  var root = document.documentElement;
+  var themeMeta = document.querySelector('meta[name="theme-color"]');
+  var themeButton = document.querySelector('[data-theme-toggle]');
+  var systemDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function applyTheme(theme) {
+    root.dataset.theme = theme;
+    if (themeMeta) themeMeta.content = theme === 'dark' ? '#191a20' : '#fff3f8';
+    if (themeButton) {
+      var label = theme === 'dark' ? '切换为日间模式' : '切换为夜间模式';
+      themeButton.setAttribute('aria-label', label);
+      themeButton.setAttribute('title', label);
+    }
+  }
+  applyTheme(root.dataset.theme === 'dark' ? 'dark' : 'light');
+  if (themeButton) {
+    themeButton.addEventListener('click', function () {
+      var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('autotask:theme', next); } catch (ignore) {}
+      applyTheme(next);
+    });
+  }
+  if (systemDark) {
+    var onSystemChange = function (event) {
+      var saved = null;
+      try { saved = localStorage.getItem('autotask:theme'); } catch (ignore) {}
+      if (saved !== 'dark' && saved !== 'light') applyTheme(event.matches ? 'dark' : 'light');
+    };
+    if (systemDark.addEventListener) systemDark.addEventListener('change', onSystemChange);
+    else if (systemDark.addListener) systemDark.addListener(onSystemChange);
+  }
+
+  // A friendlier replacement for window.confirm(); resolves to true/false.
+  var dialog = document.getElementById('confirm-dialog');
+  window.AutoTaskUI.confirm = function (message) {
+    if (!dialog || typeof dialog.showModal !== 'function') return Promise.resolve(window.confirm(message));
+    dialog.querySelector('.confirm-dialog-message').textContent = window.AutoTaskI18n ? window.AutoTaskI18n.t(message) : message;
+    dialog.returnValue = '';
+    dialog.showModal();
+    dialog.querySelector('button[value="cancel"]').focus();
+    return new Promise(function (resolve) {
+      dialog.addEventListener('close', function onClose() {
+        dialog.removeEventListener('close', onClose);
+        resolve(dialog.returnValue === 'confirm');
+      });
+    });
+  };
+  if (dialog) {
+    dialog.addEventListener('click', function (event) {
+      if (event.target === dialog) dialog.close('cancel');
+    });
+  }
+
+  var region = document.querySelector('.toast-region');
+  window.AutoTaskUI.toast = function (message, tone) {
+    if (!region || !message) return;
+    if (window.AutoTaskI18n) message = window.AutoTaskI18n.t(message);
+    var toast = document.createElement('div');
+    toast.className = 'toast ' + (tone || 'ok');
+    var icon = document.createElement('span');
+    icon.className = 'toast-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    var text = document.createElement('span');
+    text.textContent = message;
+    toast.appendChild(icon);
+    toast.appendChild(text);
+    region.appendChild(toast);
+    window.setTimeout(function () {
+      toast.classList.add('is-leaving');
+      window.setTimeout(function () { toast.remove(); }, 260);
+    }, 3200);
+  };
+})();
+</script>
+{% if session.get('authed') %}
+<script>
+(function () {
+  var ui = window.AutoTaskUI;
+  var dashboardScrollKey = 'autotask:dashboard-scroll';
+  var dashboardRestoreKey = 'autotask:restore-dashboard-scroll';
+
+  // Remember the task centre's position before leaving it, then restore it
+  // only when the user explicitly uses a "back to task centre" link. This
+  // keeps normal navigation starting at the top while making detail-page
+  // round trips feel continuous.
+  function isDashboard() { return document.body.classList.contains('dashboard-page'); }
+  function saveDashboardScroll() {
+    if (!isDashboard()) return;
+    try { sessionStorage.setItem(dashboardScrollKey, String(window.scrollY || window.pageYOffset || 0)); } catch (ignore) {}
+  }
+  function takeDashboardScroll() {
+    try {
+      if (!isDashboard() || sessionStorage.getItem(dashboardRestoreKey) !== '1') return null;
+      sessionStorage.removeItem(dashboardRestoreKey);
+      var saved = Number(sessionStorage.getItem(dashboardScrollKey));
+      return Number.isFinite(saved) && saved > 0 ? saved : null;
+    } catch (ignore) { return null; }
+  }
+  function scrollAfterLayout(y) {
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function () { window.scrollTo(0, y); });
+    });
+  }
+  window.addEventListener('pagehide', saveDashboardScroll);
+  window.addEventListener('beforeunload', saveDashboardScroll);
+  var initialDashboardScroll = takeDashboardScroll();
+  if (initialDashboardScroll !== null) scrollAfterLayout(initialDashboardScroll);
+  document.addEventListener('click', function (event) {
+    var backLink = event.target.closest('a[data-restore-dashboard-scroll]');
+    if (!backLink) return;
+    try { sessionStorage.setItem(dashboardRestoreKey, '1'); } catch (ignore) {}
+  });
+
+  var header = document.querySelector('.site-header');
+  function updateHeaderShadow() { header.classList.toggle('is-scrolled', (window.scrollY || 0) > 4); }
+  window.addEventListener('scroll', updateHeaderShadow, { passive: true });
+  updateHeaderShadow();
+
+  var toggle = document.querySelector('.nav-toggle');
+  var nav = document.getElementById('primary-nav');
+  if (!toggle || !nav) return;
+
+  function closeNav() {
+    toggle.setAttribute('aria-expanded', 'false');
+    nav.classList.remove('is-open');
+  }
+  toggle.addEventListener('click', function () {
+    var open = toggle.getAttribute('aria-expanded') === 'true';
+    toggle.setAttribute('aria-expanded', String(!open));
+    nav.classList.toggle('is-open', !open);
+  });
+  nav.addEventListener('click', function (event) {
+    if (event.target.matches('a')) closeNav();
+  });
+  document.addEventListener('click', function (event) {
+    if (!event.target.closest('.site-header')) closeNav();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') closeNav();
+  });
+
+  // In-app navigation: fetch the next page and swap only <main>, the title
+  // and the nav highlight, so moving between pages feels like switching the
+  // dashboard tabs instead of a full browser reload. Anything unexpected
+  // (login redirect, error page, new stylesheet) falls back to a real load.
+  if (!window.fetch || !window.DOMParser || !window.AbortController || !(window.history && window.history.pushState)) return;
+
+  var main = document.querySelector('main');
+  var stylesheet = document.querySelector('link[rel="stylesheet"]');
+  var scrollPositions = {};
+  var entryKey = (window.history.state && window.history.state.autotaskKey) || newKey();
+  var renderedPage = pageKey(window.location);
+  var navToken = 0;
+  var inflight = null;
+  var early = null;
+
+  function newKey() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function pageKey(url) { return url.pathname + url.search; }
+  function withKey(key) { var state = Object.assign({}, window.history.state || {}); state.autotaskKey = key; return state; }
+  window.history.replaceState(withKey(entryKey), '');
+  if ('scrollRestoration' in window.history) {
+    window.history.scrollRestoration = 'manual';
+    // Let the browser restore scroll itself on real reloads.
+    window.addEventListener('pagehide', function () { window.history.scrollRestoration = 'auto'; });
+    window.addEventListener('pageshow', function () { window.history.scrollRestoration = 'manual'; });
+  }
+
+  function hardNavigate(url) { window.location.assign(url); }
+  function softUrl(href) {
+    var url;
+    try { url = new URL(href, window.location.href); } catch (ignore) { return null; }
+    if (url.origin !== window.location.origin) return null;
+    if (/^\/(api|static|login|logout)(\/|$)/.test(url.pathname)) return null;
+    return url;
+  }
+  function linkTarget(event) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return null;
+    var link = event.target.closest && event.target.closest('a[href]');
+    if (!link || (link.target && link.target !== '_self') || link.hasAttribute('download') || link.hasAttribute('data-hard-nav')) return null;
+    var url = softUrl(link.href);
+    // Plain in-page anchors (e.g. the dashboard tabs) stay with the browser.
+    if (!url || (url.hash && pageKey(url) === renderedPage)) return null;
+    return url;
+  }
+
+  function request(url, init) {
+    var controller = new AbortController();
+    var promise = fetch(url, Object.assign({ credentials: 'same-origin', signal: controller.signal }, init || {}))
+      .then(function (response) {
+        var isHtml = (response.headers.get('content-type') || '').indexOf('text/html') !== -1;
+        return (isHtml ? response.text() : Promise.resolve(null)).then(function (html) {
+          return { ok: response.ok && isHtml, html: html, url: response.url, redirected: response.redirected };
+        });
+      });
+    return { promise: promise, controller: controller };
+  }
+
+  // Start fetching on pointerdown: by the time the click lands (~100ms later)
+  // the slow server has usually answered already.
+  document.addEventListener('pointerdown', function (event) {
+    var url = linkTarget(event);
+    if (!url || (early && early.href === url.href)) return;
+    if (early) early.req.controller.abort();
+    early = { href: url.href, at: Date.now(), req: request(url.href) };
+    early.req.promise.catch(function () {});
+  });
+
+  function setBusy(busy) { document.documentElement.classList.toggle('is-navigating', busy); }
+
+  function swapPage(doc) {
+    var newMain = doc.querySelector('main');
+    ui.pageController.abort();
+    ui.pageController = new AbortController();
+    document.title = doc.title;
+    document.body.className = doc.body.className;
+    nav.innerHTML = doc.getElementById('primary-nav').innerHTML;
+    closeNav();
+    main.innerHTML = newMain.innerHTML;
+    // Scripts inserted through innerHTML are inert; recreate them so each
+    // page's own setup code runs just like on a full load.
+    Array.prototype.forEach.call(main.querySelectorAll('script'), function (old) {
+      var script = document.createElement('script');
+      Array.prototype.forEach.call(old.attributes, function (attr) { script.setAttribute(attr.name, attr.value); });
+      script.textContent = old.textContent;
+      old.parentNode.replaceChild(script, old);
+    });
+    ui.initFlashes(main);
+    main.style.animation = 'none';
+    void main.offsetWidth;
+    main.style.animation = '';
+    main.setAttribute('tabindex', '-1');
+    main.focus({ preventScroll: true });
+  }
+
+  // mode: 'push' (link/form), 'pop' (back/forward) or 'replace'.
+  function navigate(href, mode, init, onFail) {
+    var token = ++navToken;
+    if (inflight) inflight.controller.abort();
+    var req;
+    if (!init && early && early.href === href && Date.now() - early.at < 10000) req = early.req;
+    else req = request(href, init);
+    early = null;
+    inflight = req;
+    var busyTimer = window.setTimeout(function () { setBusy(true); }, 160);
+    return req.promise.then(function (result) {
+      if (token !== navToken) return;
+      var finalUrl = result.redirected ? result.url : href;
+      if (!result.ok) { if (onFail) onFail(); else hardNavigate(finalUrl); return; }
+      var doc = new DOMParser().parseFromString(result.html, 'text/html');
+      var newSheet = doc.querySelector('link[rel="stylesheet"]');
+      if (!doc.querySelector('main') || !doc.getElementById('primary-nav') || !newSheet || !stylesheet ||
+          newSheet.getAttribute('href') !== stylesheet.getAttribute('href')) {
+        hardNavigate(finalUrl);
+        return;
+      }
+      var target = new URL(finalUrl, window.location.href);
+      if (mode !== 'pop') {
+        saveDashboardScroll();
+        scrollPositions[entryKey] = window.scrollY || 0;
+        entryKey = newKey();
+        var replace = mode === 'replace' || target.href === window.location.href;
+        window.history[replace ? 'replaceState' : 'pushState'](replace ? withKey(entryKey) : { autotaskKey: entryKey }, '', target.href);
+      } else if (result.redirected) {
+        window.history.replaceState(withKey(entryKey), '', target.href);
+      }
+      renderedPage = pageKey(target);
+      swapPage(doc);
+      var restore = mode === 'pop' ? (scrollPositions[entryKey] || 0) : takeDashboardScroll();
+      window.scrollTo(0, restore || 0);
+    }).catch(function (error) {
+      if (error && error.name === 'AbortError') return;
+      if (token !== navToken) return;
+      if (onFail) onFail(); else hardNavigate(href);
+    }).then(function () {
+      window.clearTimeout(busyTimer);
+      if (token === navToken) { setBusy(false); inflight = null; }
+    });
+  }
+
+  document.addEventListener('click', function (event) {
+    var url = linkTarget(event);
+    if (!url) return;
+    event.preventDefault();
+    navigate(url.href, 'push');
+  });
+
+  // Ordinary forms (new/edit task, settings) submit in the background and
+  // show whatever page the server redirects to, flash messages included.
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (event.defaultPrevented || form.hasAttribute('data-async') || form.hasAttribute('data-hard-nav')) return;
+    var method = (form.getAttribute('method') || 'get').toLowerCase();
+    var action = softUrl(form.action);
+    if (method === 'dialog' || !action) return;
+    event.preventDefault();
+    var data;
+    try { data = new FormData(form, event.submitter); } catch (ignore) { data = new FormData(form); }
+    if (method === 'get') {
+      action.search = new URLSearchParams(data).toString();
+      navigate(action.href, 'push');
+      return;
+    }
+    navigate(action.href, 'push', { method: 'POST', body: data }, function () {
+      form.querySelectorAll('[type="submit"]').forEach(function (button) { button.disabled = false; button.classList.remove('is-loading'); });
+      ui.toast('提交失败，请检查网络后重试', 'error');
+    });
+  });
+
+  window.addEventListener('popstate', function (event) {
+    // Hash-only changes (dashboard tabs) are handled by the page itself.
+    if (pageKey(window.location) === renderedPage) return;
+    scrollPositions[entryKey] = window.scrollY || 0;
+    entryKey = (event.state && event.state.autotaskKey) || newKey();
+    if (!event.state || !event.state.autotaskKey) window.history.replaceState(withKey(entryKey), '');
+    navigate(window.location.href, 'pop');
+  });
+})();
+</script>
+{% endif %}
+<script src="{{ url_for('static', filename='i18n.js', v=asset_version) }}"></script>
+</body>
+</html>

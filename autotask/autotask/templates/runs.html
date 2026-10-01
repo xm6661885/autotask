@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ task.name }} 运行日志 - AutoTask{% endblock %}
+{% block body_class %}runs-page{% endblock %}
+{% block content %}
+{% set is_one_off = task.task_kind == 'one_off' %}
+<div class="card run-history-card">
+  <a class="back-link" data-restore-dashboard-scroll href="{{ url_for('index') }}#{{ 'one-off' if is_one_off else 'recurring' }}">← 返回任务中心</a>
+  <div class="page-title-row">
+    <div>
+      <h1>{{ task.name }}</h1>
+      {% if task.description %}<p class="page-description">{{ task.description }}</p>{% endif %}
+    </div>
+    <span class="badge kind-badge {{ 'pending' if is_one_off else 'on' }}">{{ '一次性任务' if is_one_off else '重复任务' }}</span>
+  </div>
+  <h2 class="run-history-title">运行记录</h2>
+  <table class="runs-table">
+    <thead><tr><th>#</th><th>触发方式</th><th>开始时间</th><th>结束时间</th><th>退出码</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for r in runs %}
+      <tr>
+        <td data-label="#" class="run-id">{{ r.id }}</td>
+        <td data-label="触发方式"><span class="trigger-chip mono">{{ r.trigger }}</span></td>
+        <td data-label="开始时间" class="muted">{{ r.started_at | fmt_ts }}</td>
+        <td data-label="结束时间" class="muted">{% if r.finished_at %}{{ r.finished_at | fmt_ts }}{% else %}<span class="badge running">运行中...</span>{% endif %}</td>
+        <td data-label="退出码">
+          {% if r.exit_code is none %}
+            <span class="muted">-</span>
+          {% elif r.exit_code == 0 %}
+            <span class="badge success">0</span>
+          {% else %}
+            <span class="badge failed">{{ r.exit_code }}</span>
+          {% endif %}
+        </td>
+        <td data-label="操作"><a class="btn btn-sm btn-soft" href="{{ url_for('run_log', run_id=r.id) }}">查看日志</a></td>
+      </tr>
+      {% else %}
+      <tr class="empty-row"><td colspan="6"><div class="empty-state empty-state-compact"><span class="empty-illustration" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span>暂无运行记录</span></div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

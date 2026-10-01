@@ -1,0 +1,10 @@
+bind_host: 127.0.0.1
+port: 8990
+scripts_dir: /home/xm666/Automations/scripts
+data_dir: /home/xm666/Automations/data
+python_bin: /home/xm666/Automations/.venv/bin/python3
+shell_bin: bash
+poll_interval_sec: 2
+password_hash: ""
+secret_key: ""
+webhook_secret: ""

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}运行日志 #{{ run.id }} - AutoTask{% endblock %}
+{% block body_class %}log-page{% endblock %}
+{% block content %}
+<div class="card log-card">
+  <a class="back-link" href="{{ url_for('task_runs', task_id=run.task_id) }}">← 返回运行记录</a>
+  <h1>运行日志 <span class="log-run-number">#{{ run.id }}</span></h1>
+  <p class="run-meta" id="run_meta">
+    <span class="meta-chip meta-start">开始: {{ run.started_at | fmt_ts }}</span>
+    <span class="meta-chip meta-end">结束: <span id="finished_at">{{ (run.finished_at | fmt_ts) if run.finished_at else '运行中...' }}</span></span>
+    <span class="meta-chip meta-exit {{ 'is-ok' if run.exit_code == 0 else ('is-bad' if run.exit_code is not none else '') }}" id="exit_chip">退出码: <span id="exit_code">{{ run.exit_code if run.exit_code is not none else '-' }}</span></span>
+    {% if not run.finished_at %}<span class="badge running">实时跟踪</span>{% endif %}
+  </p>
+  <div class="log-window{{ ' is-live' if not run.finished_at else '' }}">
+    <div class="log-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+    <pre class="log" id="log_content">{{ content }}</pre>
+  </div>
+</div>
+{% if not run.finished_at %}
+<script>
+(function () {
+  var pageSignal = window.AutoTaskUI.pageController.signal;
+  var runId = {{ run.id }};
+  var offset = {{ offset }};
+  var logEl = document.getElementById('log_content');
+  var finishedEl = document.getElementById('finished_at');
+  var exitEl = document.getElementById('exit_code');
+  var exitChip = document.getElementById('exit_chip');
+
+  // Follow new output only while the reader is already at the bottom, so
+  // scrolling up to inspect earlier lines is not interrupted.
+  function nearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight < 40; }
+  function pageNearBottom() { return window.innerHeight + window.scrollY >= document.body.scrollHeight - 80; }
+  logEl.scrollTop = logEl.scrollHeight;
+
+  function poll() {
+    if (pageSignal.aborted) return;
+    fetch('/api/runs/' + runId + '/tail?offset=' + offset, { signal: pageSignal })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.content) {
+          var follow = nearBottom(logEl), followPage = pageNearBottom();
+          logEl.textContent += data.content;
+          offset = data.offset;
+          if (follow) logEl.scrollTop = logEl.scrollHeight;
+          if (followPage) window.scrollTo(0, document.body.scrollHeight);
+        }
+        if (data.finished) {
+          finishedEl.textContent = data.finished_at || '-';
+          exitEl.textContent = data.exit_code !== null ? data.exit_code : '-';
+          if (data.exit_code !== null) exitChip.classList.add(data.exit_code === 0 ? 'is-ok' : 'is-bad');
+          var badge = document.querySelector('#run_meta .badge');
+          if (badge) badge.remove();
+          var win = document.querySelector('.log-window');
+          if (win) win.classList.remove('is-live');
+          return;
+        }
+        setTimeout(poll, 1500);
+      })
+      .catch(function () { if (!pageSignal.aborted) setTimeout(poll, 3000); });
+  }
+  poll();
+})();
+</script>
+{% endif %}
+{% endblock %}

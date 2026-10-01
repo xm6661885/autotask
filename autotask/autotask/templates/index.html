@@ -1,0 +1,615 @@
+{% extends "base.html" %}
+{% block title %}任务中心 - AutoTask{% endblock %}
+{% block body_class %}dashboard-page{% endblock %}
+{% block content %}
+{% if recurring_tasks is defined %}
+  {% set recurring = recurring_tasks %}
+{% else %}
+  {% set recurring = tasks %}
+{% endif %}
+{% if one_off_tasks is defined %}
+  {% set one_off = one_off_tasks %}
+{% else %}
+  {% set one_off = [] %}
+{% endif %}
+
+{% macro icon_recurring() -%}
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9M4 13a8 8 0 0 0 14.3 4.9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M5 3v4h4M19 21v-4h-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+{%- endmacro %}
+{% macro icon_one_off() -%}
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.2 5.4 5.8.5-4.4 3.8 1.4 5.7L12 15.2l-5 3 1.4-5.7L4 8.7l5.8-.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+{%- endmacro %}
+
+{% macro script_cell(task) -%}
+  <span class="script-cell">
+    <span class="script-scroll" title="{{ task.script }}">
+      <span class="script-scroll-track">
+        <span class="script-scroll-text">{{ task.script }}</span>
+        <span class="script-scroll-text" aria-hidden="true">{{ task.script }}</span>
+      </span>
+    </span>
+    {% if task.args_list %}
+    <details class="script-args">
+      <summary title="{{ task.args_list|join(' ') }}">参数 · {{ task.args_list|length }}</summary>
+      <code>{{ task.args_list|join(' ') }}</code>
+    </details>
+    {% endif %}
+  </span>
+{%- endmacro %}
+
+{% macro last_run(task) -%}
+  <div class="last-run-cell">
+    <span class="js-last-run">{{ task.last_run_at | fmt_ts }}</span>
+    <span class="js-last-result">
+      {% if task.last_exit_code is none and task.last_run_at %}
+        <span class="badge failed">异常</span>
+      {% elif task.last_exit_code is not none and task.last_exit_code == 0 %}
+        <span class="badge success">正常</span>
+      {% elif task.last_exit_code is not none %}
+        <span class="badge failed">失败</span>
+      {% else %}
+        <span class="badge unknown">暂无记录</span>
+      {% endif %}
+    </span>
+  </div>
+{%- endmacro %}
+
+{% macro group_pill(task) -%}
+  <button class="task-group-pill" type="button" data-move-url="{{ url_for('move_task_group', task_id=task.id) }}" aria-haspopup="menu" title="移动到其他分组">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4.2l2 2.2H19a1.5 1.5 0 0 1 1.5 1.5v8.3A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    <span class="js-group-name">{{ task.group_name or '未分组' }}</span>
+    <svg class="pill-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+{%- endmacro %}
+
+<section class="dashboard-hero" aria-labelledby="dashboard-title">
+  <div class="hero-copy">
+    <p class="eyebrow">AUTOMATION CENTER</p>
+    <h1 id="dashboard-title">任务中心</h1>
+  </div>
+  {% set stat = namespace(running=0, enabled=0, failed=0) %}
+  {% for t in recurring + one_off %}
+    {% if t.running_pid %}{% set stat.running = stat.running + 1 %}{% elif t.last_run_at and t.last_exit_code != 0 %}{% set stat.failed = stat.failed + 1 %}{% endif %}
+  {% endfor %}
+  {% for t in recurring %}{% if t.enabled %}{% set stat.enabled = stat.enabled + 1 %}{% endif %}{% endfor %}
+  <div class="hero-stats" aria-label="任务状态统计">
+    <div class="hero-stat"><span class="hero-stat-value" data-stat="total">{{ recurring|length + one_off|length }}</span><span class="hero-stat-label">全部任务</span></div>
+    <div class="hero-stat stat-running{{ ' is-active' if stat.running else '' }}"><span class="hero-stat-value" data-stat="running">{{ stat.running }}</span><span class="hero-stat-label">运行中</span></div>
+    <div class="hero-stat stat-enabled"><span class="hero-stat-value"><span data-stat="enabled">{{ stat.enabled }}</span><small>/<span data-stat="recurring">{{ recurring|length }}</span></small></span><span class="hero-stat-label">重复任务启用</span></div>
+    <button class="hero-stat stat-failed{{ ' is-active' if stat.failed else '' }}" type="button" data-stat-failed aria-haspopup="menu"{% if not stat.failed %} disabled{% endif %}><span class="hero-stat-value" data-stat="failed">{{ stat.failed }}</span><span class="hero-stat-label">最近失败</span></button>
+  </div>
+</section>
+
+<nav class="group-bar" aria-label="任务分组" data-create-url="{{ url_for('create_group') }}">
+  <button class="group-chip" type="button" data-group-filter="all" aria-pressed="{{ 'true' if group_filter == 'all' else 'false' }}">所有任务<span class="group-chip-count" data-group-count="all">{{ total_count }}</span></button>
+  <button class="group-chip" type="button" data-group-filter="ungrouped" data-group-name="未分组" aria-pressed="{{ 'true' if group_filter == 'ungrouped' else 'false' }}">未分组<span class="group-chip-count" data-group-count="ungrouped">{{ ungrouped_count }}</span></button>
+  {% for group in groups %}
+  <span class="group-chip-wrap">
+    <button class="group-chip" type="button" data-group-filter="{{ group.id }}" data-group-name="{{ group.name }}" data-rename-url="{{ url_for('rename_group', group_id=group.id) }}" data-delete-url="{{ url_for('delete_group', group_id=group.id) }}" aria-pressed="{{ 'true' if group_filter == group.id|string else 'false' }}" title="双击重命名"><span class="group-chip-name">{{ group.name }}</span><span class="group-chip-count" data-group-count="{{ group.id }}">{{ group.task_count }}</span></button>
+    <button class="group-chip-more" type="button" data-group-more="{{ group.id }}" aria-haspopup="menu" aria-label="管理分组「{{ group.name }}」">⋯</button>
+  </span>
+  {% endfor %}
+  <button class="group-chip group-chip-add" type="button" data-group-add>+ 新建分组</button>
+</nav>
+
+<div class="task-tabs" role="tablist" aria-label="任务类型">
+  <span class="task-tabs-indicator" aria-hidden="true"></span>
+  <button class="task-tab is-active" id="recurring-tab" type="button" role="tab" aria-selected="true" aria-controls="recurring-panel" data-tab="recurring">
+    重复任务 <span class="tab-count" data-tab-count="recurring">{{ recurring|length }}</span>
+  </button>
+  <button class="task-tab" id="one-off-tab" type="button" role="tab" aria-selected="false" aria-controls="one-off-panel" data-tab="one-off">
+    一次性任务 <span class="tab-count" data-tab-count="one-off">{{ one_off|length }}</span>
+  </button>
+</div>
+
+<section class="task-panel" id="recurring-panel" role="tabpanel" aria-labelledby="recurring-tab">
+  <div class="section-heading">
+    <div><h2>重复任务</h2><p>适合按 Cron、固定间隔、Webhook 或手动反复执行的工作。</p></div>
+    <a class="btn btn-primary btn-new" href="{{ url_for('new_task', task_kind='recurring') }}">+ 新建重复任务</a>
+  </div>
+  <div class="task-grid" data-task-list="recurring">
+    {% for t in recurring %}
+    <article class="task-card kind-recurring{{ ' is-running' if t.running_pid else '' }}{{ ' is-disabled' if not t.enabled and not t.running_pid else '' }}" data-task-id="{{ t.id }}" data-task-kind="recurring" data-group-id="{{ t.group_key }}"{% if t.last_run_at and t.last_exit_code != 0 %} data-failed{% endif %}{% if group_filter not in ('all', t.group_key) %} hidden{% endif %}>
+      <div class="task-card-head">
+        <span class="task-card-icon">{{ icon_recurring() }}</span>
+        <div class="task-name-cell"><strong>{{ t.name }}</strong><span class="task-id">#{{ t.id }}</span>{{ group_pill(t) }}</div>
+        <div class="task-card-status js-status">
+          {% if t.running_pid %}<span class="badge running">运行中</span>
+          {% elif t.enabled %}<span class="badge on">已启用</span>
+          {% else %}<span class="badge off">已停用</span>{% endif %}
+        </div>
+      </div>
+      {% if t.description %}<p class="task-description" title="{{ t.description }}">{{ t.description }}</p>{% endif %}
+      <div class="task-script mono">{{ script_cell(t) }}</div>
+      <dl class="task-meta">
+        <div class="task-meta-item">
+          <dt>调度</dt>
+          <dd>
+            {% if t.schedule_type == 'cron' %}<span class="schedule-value mono">Cron · {{ t.schedule_value }}</span>
+            {% elif t.schedule_type == 'interval' %}<span class="schedule-value">每 {{ t.schedule_value }} 秒</span>
+            {% elif t.schedule_type == 'webhook' %}<span class="schedule-value">Webhook 触发</span>
+            {% else %}<span class="schedule-value muted">手动触发</span>{% endif %}
+          </dd>
+        </div>
+        <div class="task-meta-item"><dt>最近一次</dt><dd>{{ last_run(t) }}</dd></div>
+        <div class="task-meta-item"><dt>下次运行</dt><dd class="js-next-run">{{ t.next_run_at | fmt_ts }}</dd></div>
+      </dl>
+      <div class="actions js-actions">
+        <form class="inline js-stop-form" method="post" action="{{ url_for('stop_task', task_id=t.id) }}" data-async data-action="stop" data-success-message="已发送停止请求" style="{{ '' if t.running_pid else 'display:none;' }}"><button class="btn btn-sm btn-warn btn-main" type="submit">停止</button></form>
+        <form class="inline js-run-form" method="post" action="{{ url_for('run_task_now', task_id=t.id) }}" data-async data-action="run" data-success-message="任务已开始运行" style="{{ 'display:none;' if t.running_pid else '' }}"><button class="btn btn-sm btn-primary btn-main" type="submit">立即运行</button></form>
+        <a class="btn btn-sm btn-soft" href="{{ url_for('task_runs', task_id=t.id) }}">运行记录</a>
+        <a class="btn btn-sm btn-soft" href="{{ url_for('edit_task', task_id=t.id) }}">编辑</a>
+        <form class="inline js-toggle-form" method="post" action="{{ url_for('toggle_task', task_id=t.id) }}" data-async data-action="toggle" data-success-message="任务状态已更新"><button class="btn btn-sm btn-soft btn-toggle js-toggle-label" type="submit" data-enabled="{{ 'true' if t.enabled else 'false' }}">{{ '已启用' if t.enabled else '已停用' }}</button></form>
+        <form class="inline js-delete-form" method="post" action="{{ url_for('delete_task', task_id=t.id) }}" data-async data-action="delete" data-success-message="任务已删除" data-confirm="确认删除任务「{{ t.name }}」？这不会删除脚本文件。" style="{{ 'display:none;' if t.running_pid else '' }}"><button class="btn btn-sm btn-danger" type="submit">删除</button></form>
+      </div>
+    </article>
+    {% endfor %}
+    <div class="empty-state" data-empty-state{% if recurring %} hidden{% endif %}>
+      <span class="empty-illustration" aria-hidden="true">{{ icon_recurring() }}</span>
+      <strong data-empty-title="重复任务">还没有重复任务</strong><span>创建 Cron 或固定间隔任务，让日常工作自动完成。</span><a href="{{ url_for('new_task', task_kind='recurring') }}">新建重复任务 →</a>
+    </div>
+  </div>
+</section>
+
+<section class="task-panel" id="one-off-panel" role="tabpanel" aria-labelledby="one-off-tab" hidden>
+  <div class="section-heading">
+    <div><h2>一次性任务</h2><p>适合临时脚本和需要长时间运行的作业；每个任务只会执行一次。</p></div>
+    <a class="btn btn-primary btn-new" href="{{ url_for('new_task', task_kind='one_off') }}">+ 新建一次性任务</a>
+  </div>
+  <div class="task-grid" data-task-list="one-off">
+    {% for t in one_off %}
+    {% set phase = t.one_off_state or ('running' if t.running_pid else 'pending') %}
+    <article class="task-card kind-one-off{{ ' is-running' if t.running_pid else '' }}" data-task-id="{{ t.id }}" data-task-kind="one-off" data-group-id="{{ t.group_key }}"{% if t.last_run_at and t.last_exit_code != 0 %} data-failed{% endif %}{% if group_filter not in ('all', t.group_key) %} hidden{% endif %}>
+      <div class="task-card-head">
+        <span class="task-card-icon">{{ icon_one_off() }}</span>
+        <div class="task-name-cell"><strong>{{ t.name }}</strong><span class="task-id">#{{ t.id }}</span>{{ group_pill(t) }}</div>
+        <div class="task-card-status js-oneoff-state">
+          {% if phase == 'running' %}<span class="badge running">运行中</span>
+          {% elif phase == 'completed' %}<span class="badge success">已完成</span>
+          {% elif phase == 'failed' %}<span class="badge failed">失败</span>
+          {% elif phase == 'cancelled' %}<span class="badge off">已取消</span>
+          {% else %}<span class="badge pending">等待执行</span>{% endif %}
+        </div>
+      </div>
+      {% if t.description %}<p class="task-description" title="{{ t.description }}">{{ t.description }}</p>{% endif %}
+      <div class="task-script mono">{{ script_cell(t) }}</div>
+      <dl class="task-meta">
+        <div class="task-meta-item"><dt>执行方式</dt><dd>{% if t.one_off_trigger == 'scheduled' %}<span class="schedule-value">定时执行一次</span>{% else %}<span class="schedule-value">创建后立即执行</span>{% endif %}</dd></div>
+        <div class="task-meta-item"><dt>计划时间</dt><dd class="js-oneoff-planned">{% if t.one_off_trigger == 'scheduled' %}{{ t.scheduled_at | fmt_ts }}{% else %}立即执行{% endif %}</dd></div>
+        <div class="task-meta-item"><dt>最近一次</dt><dd>{{ last_run(t) }}</dd></div>
+      </dl>
+      <div class="actions js-actions">
+        <form class="inline js-stop-form" method="post" action="{{ url_for('stop_task', task_id=t.id) }}" data-async data-action="stop" data-success-message="已发送停止请求" style="{{ '' if t.running_pid else 'display:none;' }}"><button class="btn btn-sm btn-warn btn-main" type="submit">停止</button></form>
+        <form class="inline js-run-form" method="post" action="{{ url_for('run_task_now', task_id=t.id) }}" data-async data-action="run" data-success-message="一次性任务已开始运行" style="{{ 'display:none;' if t.running_pid else '' }}"><button class="btn btn-sm btn-primary btn-main js-run-label" type="submit">{{ '再次执行' if phase in ['completed', 'failed', 'cancelled'] else '立即执行' }}</button></form>
+        <a class="btn btn-sm btn-soft" href="{{ url_for('task_runs', task_id=t.id) }}">运行记录</a>
+        <form class="inline js-cancel-form" method="post" action="{{ url_for('cancel_one_off_task', task_id=t.id) }}" data-async data-action="cancel" data-success-message="一次性任务已取消" data-confirm="确认取消一次性任务「{{ t.name }}」？" style="{{ '' if phase == 'pending' else 'display:none;' }}"><button class="btn btn-sm btn-warn" type="submit">取消</button></form>
+        {% if phase == 'pending' %}<a class="btn btn-sm btn-soft js-edit-oneoff" href="{{ url_for('edit_task', task_id=t.id) }}">编辑</a>{% endif %}
+        <form class="inline js-delete-form" method="post" action="{{ url_for('delete_task', task_id=t.id) }}" data-async data-action="delete" data-success-message="任务已删除" data-confirm="确认删除一次性任务「{{ t.name }}」？这不会删除脚本文件。" style="{{ 'display:none;' if t.running_pid else '' }}"><button class="btn btn-sm btn-danger" type="submit">删除</button></form>
+      </div>
+    </article>
+    {% endfor %}
+    <div class="empty-state" data-empty-state{% if one_off %} hidden{% endif %}>
+      <span class="empty-illustration" aria-hidden="true">{{ icon_one_off() }}</span>
+      <strong data-empty-title="一次性任务">还没有一次性任务</strong><span>可安排在指定时间执行，或立即启动一个长时间运行的临时作业。</span><a href="{{ url_for('new_task', task_kind='one_off') }}">新建一次性任务 →</a>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var pageSignal = window.AutoTaskUI.pageController.signal;
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('[data-tab]'));
+  var tabList = document.querySelector('.task-tabs');
+  var indicator = document.querySelector('.task-tabs-indicator');
+  var panels = { recurring: document.getElementById('recurring-panel'), 'one-off': document.getElementById('one-off-panel') };
+  function moveIndicator() {
+    var active = tabList.querySelector('.task-tab.is-active');
+    if (!active || !indicator) return;
+    indicator.style.width = active.offsetWidth + 'px';
+    indicator.style.transform = 'translateX(' + active.offsetLeft + 'px)';
+  }
+  function activateTab(name, updateHash) {
+    if (!panels[name]) return;
+    try { sessionStorage.setItem('autotask:task-tab', name); } catch (ignore) {}
+    tabs.forEach(function (tab) { var active = tab.getAttribute('data-tab') === name; tab.classList.toggle('is-active', active); tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; });
+    Object.keys(panels).forEach(function (key) {
+      var show = key === name;
+      if (show && panels[key].hidden) { panels[key].classList.remove('is-entering'); void panels[key].offsetWidth; panels[key].classList.add('is-entering'); }
+      panels[key].hidden = !show;
+    });
+    moveIndicator();
+    if (updateHash && window.history && window.history.replaceState) window.history.replaceState(window.history.state, '', name === 'one-off' ? '#one-off' : '#recurring');
+  }
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () { activateTab(tab.getAttribute('data-tab'), true); });
+    tab.addEventListener('keydown', function (event) {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      var index = (tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+      tabs[index].focus(); activateTab(tabs[index].getAttribute('data-tab'), true);
+    });
+  });
+  var rememberedTab = 'recurring';
+  try { rememberedTab = sessionStorage.getItem('autotask:task-tab') || 'recurring'; } catch (ignore) {}
+  activateTab(window.location.hash === '#one-off' ? 'one-off' : (window.location.hash === '#recurring' ? 'recurring' : rememberedTab), false);
+  window.addEventListener('hashchange', function () { activateTab(window.location.hash === '#one-off' ? 'one-off' : 'recurring', false); }, { signal: pageSignal });
+  window.requestAnimationFrame(function () { tabList.classList.add('is-ready'); });
+  // Tab labels change width when the language switches (translations land
+  // asynchronously) or fonts load; keep the sliding pill sized to match.
+  if (window.ResizeObserver) {
+    var tabResizeObserver = new ResizeObserver(function () { moveIndicator(); });
+    tabs.forEach(function (tab) { tabResizeObserver.observe(tab); });
+    pageSignal.addEventListener('abort', function () { tabResizeObserver.disconnect(); });
+  }
+  window.addEventListener('autotask:languagechange', function () { window.requestAnimationFrame(moveIndicator); }, { signal: pageSignal });
+
+  function badge(kind, label) { return '<span class="badge ' + kind + '">' + label + '</span>'; }
+  function lastResultBadge(exitCode, lastRunAt) {
+    if (exitCode === 0) return badge('success', '正常');
+    if (exitCode === null && lastRunAt && lastRunAt !== '-') return badge('failed', '异常');
+    if (exitCode !== null && exitCode !== undefined) return badge('failed', '失败');
+    return badge('unknown', '暂无记录');
+  }
+  function oneOffBadge(state, running) {
+    if (running || state === 'running') return badge('running', '运行中');
+    if (state === 'completed') return badge('success', '已完成');
+    if (state === 'failed') return badge('failed', '失败');
+    if (state === 'cancelled') return badge('off', '已取消');
+    return badge('pending', '等待执行');
+  }
+  // Only rewrite a cell when its markup actually changes, so polling does not
+  // restart badge animations every few seconds.
+  function setHTML(node, html) { if (node && node.innerHTML !== html) node.innerHTML = html; }
+  function setText(node, text) { if (node && node.textContent !== text) node.textContent = text; }
+  function refreshScriptMarquees() { document.querySelectorAll('.script-scroll').forEach(function (box) { var text = box.querySelector('.script-scroll-text'); box.classList.toggle('is-overflowing', !!text && text.scrollWidth > box.clientWidth + 1); }); }
+  // Group filter: every card is in the page, the chips only show/hide them.
+  var groupBar = document.querySelector('.group-bar');
+  var activeGroup = 'all';
+  function liveCards() { return Array.prototype.slice.call(document.querySelectorAll('[data-task-id]:not(.is-removing)')); }
+  function groupChip(key) { return Array.prototype.find.call(groupBar.querySelectorAll('[data-group-filter]'), function (chip) { return chip.getAttribute('data-group-filter') === key; }) || null; }
+  function inActiveGroup(card) { return activeGroup === 'all' || card.getAttribute('data-group-id') === activeGroup; }
+  function refreshCounts() {
+    var cards = liveCards(), perGroup = { all: cards.length };
+    cards.forEach(function (card) { var key = card.getAttribute('data-group-id'); perGroup[key] = (perGroup[key] || 0) + 1; });
+    groupBar.querySelectorAll('[data-group-count]').forEach(function (node) { setText(node, String(perGroup[node.getAttribute('data-group-count')] || 0)); });
+    var chip = groupChip(activeGroup), groupLabel = activeGroup === 'all' || !chip ? '' : '「' + chip.getAttribute('data-group-name') + '」';
+    ['recurring', 'one-off'].forEach(function (kind) {
+      var list = document.querySelector('[data-task-list="' + kind + '"]'); if (!list) return;
+      var count = cards.filter(function (card) { return card.getAttribute('data-task-kind') === kind && inActiveGroup(card); }).length;
+      document.querySelectorAll('[data-tab-count="' + kind + '"]').forEach(function (node) { setText(node, String(count)); });
+      var empty = list.querySelector('[data-empty-state]'); if (!empty) return;
+      empty.hidden = count > 0;
+      var title = empty.querySelector('[data-empty-title]');
+      var emptyKind = title.getAttribute('data-empty-title');
+      setText(title, window.AutoTaskI18n && window.AutoTaskI18n.language() === 'en'
+        ? (groupLabel ? groupLabel + ' has no ' + emptyKind : 'No ' + emptyKind + ' yet')
+        : (groupLabel ? groupLabel + '中没有' + emptyKind : '还没有' + emptyKind));
+    });
+    refreshStats();
+    moveIndicator();
+  }
+  function applyGroup(key, remember) {
+    if (!groupChip(key)) key = 'all';
+    activeGroup = key;
+    groupBar.querySelectorAll('[data-group-filter]').forEach(function (chip) { chip.setAttribute('aria-pressed', String(chip.getAttribute('data-group-filter') === key)); });
+    document.querySelectorAll('[data-task-id]').forEach(function (card) { card.hidden = !inActiveGroup(card); });
+    refreshCounts(); refreshScriptMarquees();
+    if (!remember) return;
+    try { sessionStorage.setItem('autotask:task-group', key); } catch (ignore) {}
+    var url = new URL(window.location.href);
+    if (key === 'all') url.searchParams.delete('group'); else url.searchParams.set('group', key);
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
+  }
+  window.addEventListener('autotask:languagechange', function () { refreshCounts(); }, { signal: pageSignal });
+  function updateLastRun(card, info) {
+    card.toggleAttribute('data-failed', !!info.last_run_at && info.last_run_at !== '-' && info.last_exit_code !== 0);
+    setText(card.querySelector('.js-last-run'), info.last_run_at || '-');
+    setHTML(card.querySelector('.js-last-result'), lastResultBadge(info.last_exit_code, info.last_run_at));
+  }
+  function show(node, visible) { if (node) node.style.display = visible ? '' : 'none'; }
+  function updateRecurring(card, info) {
+    var toggle = card.querySelector('.js-toggle-label');
+    setHTML(card.querySelector('.js-status'), info.running ? badge('running', '运行中') : (info.enabled ? badge('on', '已启用') : badge('off', '已停用')));
+    setText(card.querySelector('.js-next-run'), info.next_run_at || '-'); updateLastRun(card, info);
+    show(card.querySelector('.js-stop-form'), info.running); show(card.querySelector('.js-run-form'), !info.running);
+    show(card.querySelector('.js-delete-form'), !info.running);
+    card.classList.toggle('is-running', !!info.running);
+    if (typeof info.enabled !== 'undefined') {
+      card.classList.toggle('is-disabled', !info.enabled && !info.running);
+      if (toggle) { setText(toggle, info.enabled ? '已启用' : '已停用'); toggle.setAttribute('data-enabled', String(!!info.enabled)); }
+    }
+  }
+  function updateOneOff(card, info) {
+    var state = info.one_off_state || (info.running ? 'running' : 'pending'), terminal = ['completed', 'failed', 'cancelled'].indexOf(state) !== -1;
+    var pending = state === 'pending' && !info.running;
+    setHTML(card.querySelector('.js-oneoff-state'), oneOffBadge(state, info.running));
+    setText(card.querySelector('.js-oneoff-planned'), info.one_off_trigger === 'scheduled' && info.scheduled_at ? info.scheduled_at : '立即执行');
+    updateLastRun(card, info);
+    show(card.querySelector('.js-stop-form'), info.running); show(card.querySelector('.js-run-form'), !info.running);
+    setText(card.querySelector('.js-run-label'), terminal ? '再次执行' : '立即执行');
+    show(card.querySelector('.js-cancel-form'), pending); show(card.querySelector('.js-edit-oneoff'), pending);
+    show(card.querySelector('.js-delete-form'), !info.running);
+    card.classList.toggle('is-running', !!info.running);
+  }
+  function refreshStatus() {
+    return fetch('/api/tasks/status', { credentials: 'same-origin', signal: pageSignal }).then(function (response) { if (!response.ok) throw new Error('无法更新任务状态'); return response.json(); }).then(function (data) {
+      document.querySelectorAll('[data-task-id]').forEach(function (card) { var info = data[card.getAttribute('data-task-id')]; if (!info) return; if (card.getAttribute('data-task-kind') === 'one-off') updateOneOff(card, info); else updateRecurring(card, info); });
+      refreshScriptMarquees(); refreshStats(); return data;
+    });
+  }
+  // Hero stats are global (not limited to the selected group).
+  var failedButton = document.querySelector('[data-stat-failed]');
+  function failedCards() { return liveCards().filter(function (card) { return card.hasAttribute('data-failed') && !card.classList.contains('is-running'); }); }
+  function refreshStats() {
+    var cards = liveCards(), recurring = cards.filter(function (card) { return card.getAttribute('data-task-kind') === 'recurring'; });
+    var running = cards.filter(function (card) { return card.classList.contains('is-running'); }).length, failed = failedCards().length;
+    var values = {
+      total: cards.length, running: running, recurring: recurring.length, failed: failed,
+      enabled: recurring.filter(function (card) { var toggle = card.querySelector('.js-toggle-label'); return toggle && toggle.getAttribute('data-enabled') === 'true'; }).length
+    };
+    Object.keys(values).forEach(function (key) { setText(document.querySelector('[data-stat="' + key + '"]'), String(values[key])); });
+    document.querySelector('.stat-running').classList.toggle('is-active', running > 0);
+    failedButton.classList.toggle('is-active', failed > 0);
+    failedButton.disabled = failed === 0;
+  }
+  // Bring a card into view even if another group or tab is showing.
+  function revealCard(card) {
+    if (card.hidden) applyGroup('all', true);
+    activateTab(card.getAttribute('data-task-kind'), true);
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('is-flashing'); void card.offsetWidth; card.classList.add('is-flashing');
+    window.setTimeout(function () { card.classList.remove('is-flashing'); }, 1800);
+  }
+  function removeCard(card) {
+    if (!card) return;
+    card.style.height = card.offsetHeight + 'px';
+    card.classList.add('is-removing');
+    refreshCounts();
+    window.setTimeout(function () { card.remove(); refreshCounts(); }, 320);
+  }
+  window.AutoTaskDashboard = { refresh: refreshStatus };
+  document.querySelectorAll('form[data-async]').forEach(function (form) {
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var button = form.querySelector('button[type="submit"]'); if (button && button.disabled) return;
+      var confirmation = form.getAttribute('data-confirm');
+      var ask = confirmation && window.AutoTaskUI && window.AutoTaskUI.confirm ? window.AutoTaskUI.confirm(confirmation) : Promise.resolve(true);
+      ask.then(function (ok) {
+        if (!ok) return;
+        if (button) { button.disabled = true; button.classList.add('is-loading'); }
+        fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+          .then(function (response) {
+            if (response.redirected && /\/login(?:[/?#]|$)/.test(response.url)) { window.location.assign(response.url); return null; }
+            var isJson = (response.headers.get('content-type') || '').indexOf('application/json') !== -1;
+            return (isJson ? response.json() : response.text()).then(function (body) {
+              if (!response.ok || (isJson && body && body.success === false)) {
+                throw new Error((body && body.message) || '操作未完成，请稍后重试');
+              }
+              if (!isJson) {
+                var responseDoc = new DOMParser().parseFromString(body, 'text/html');
+                var failure = responseDoc.querySelector('.flash.error .flash-text') || responseDoc.querySelector('.flash.error');
+                if (failure) throw new Error(failure.textContent.trim() || '操作未完成，请稍后重试');
+              }
+              if (form.getAttribute('data-action') === 'delete') removeCard(form.closest('[data-task-id]'));
+              return refreshStatus().then(function () { return { message: isJson && body ? body.message : null }; });
+            });
+          })
+          .then(function (result) { if (result !== null && window.AutoTaskUI) window.AutoTaskUI.toast(result.message || form.getAttribute('data-success-message') || '操作已完成', 'ok'); })
+          .catch(function (error) { if (window.AutoTaskUI) window.AutoTaskUI.toast(error.message || '操作失败，请稍后重试', 'error'); })
+          .then(function () { if (button) { button.disabled = false; button.classList.remove('is-loading'); } });
+      });
+    });
+  });
+
+  // Small popover menu shared by the card group pills and the chip "⋯" buttons.
+  var menu = null;
+  function closeMenu(restoreFocus) {
+    if (!menu) return;
+    var anchor = menu.anchor; menu.remove(); menu = null;
+    anchor.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) anchor.focus();
+  }
+  function openMenu(anchor, title, items) {
+    var reopen = menu && menu.anchor === anchor;
+    closeMenu(false);
+    if (reopen) return;
+    menu = document.createElement('div');
+    menu.className = 'pop-menu'; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', title); menu.anchor = anchor;
+    var heading = document.createElement('div');
+    heading.className = 'pop-menu-title'; heading.textContent = title; heading.setAttribute('aria-hidden', 'true');
+    menu.appendChild(heading);
+    items.forEach(function (item) {
+      var button = document.createElement('button');
+      button.type = 'button'; button.textContent = item.label;
+      button.setAttribute('role', item.checked === undefined ? 'menuitem' : 'menuitemradio');
+      if (item.checked !== undefined) button.setAttribute('aria-checked', String(item.checked));
+      if (item.danger) button.className = 'is-danger';
+      button.addEventListener('click', function () { closeMenu(!item.keepsFocus); item.run(); });
+      menu.appendChild(button);
+    });
+    // Lives on <body>: <main>'s entrance animation keeps a transform, which
+    // would make it the containing block for this fixed-position menu.
+    document.body.appendChild(menu);
+    anchor.setAttribute('aria-expanded', 'true');
+    var box = anchor.getBoundingClientRect(), width = menu.offsetWidth, height = menu.offsetHeight;
+    var top = box.bottom + 6 + height > window.innerHeight ? box.top - 6 - height : box.bottom + 6;
+    menu.style.top = Math.max(8, top) + 'px';
+    menu.style.left = Math.max(8, Math.min(box.left, window.innerWidth - width - 8)) + 'px';
+    (menu.querySelector('[aria-checked="true"]') || menu.querySelector('button')).focus({ preventScroll: true });
+  }
+  pageSignal.addEventListener('abort', function () { closeMenu(false); });
+  document.addEventListener('pointerdown', function (event) { if (menu && !menu.contains(event.target) && !menu.anchor.contains(event.target)) closeMenu(false); }, { signal: pageSignal });
+  document.addEventListener('keydown', function (event) {
+    if (!menu) return;
+    if (event.key === 'Escape' || event.key === 'Tab') { if (event.key === 'Escape') event.preventDefault(); closeMenu(event.key === 'Escape'); return; }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    var buttons = Array.prototype.slice.call(menu.querySelectorAll('button')), index = buttons.indexOf(document.activeElement);
+    buttons[(index + (event.key === 'ArrowDown' ? 1 : buttons.length - 1)) % buttons.length].focus();
+  }, { signal: pageSignal });
+  window.addEventListener('scroll', function () { closeMenu(false); }, { passive: true, signal: pageSignal });
+
+  function groupChoices() {
+    return Array.prototype.slice.call(groupBar.querySelectorAll('[data-group-name]')).map(function (chip) {
+      return { key: chip.getAttribute('data-group-filter'), name: chip.getAttribute('data-group-name') };
+    });
+  }
+  function postJSON(url, fields) {
+    var body = new FormData();
+    Object.keys(fields || {}).forEach(function (name) { body.append(name, fields[name]); });
+    return fetch(url, { method: 'POST', body: body, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (response) {
+        if (response.redirected && /\/login(?:[/?#]|$)/.test(response.url)) { window.location.assign(response.url); return new Promise(function () {}); }
+        return response.json().catch(function () { return {}; }).then(function (result) {
+          if (!response.ok || result.success === false) throw new Error(result.message || '操作失败，请稍后重试');
+          return result;
+        });
+      });
+  }
+  function groupUrl(id, action) { return groupBar.getAttribute('data-create-url') + '/' + id + '/' + action; }
+  function toastError(error) { window.AutoTaskUI.toast(error.message || '操作失败，请稍后重试', 'error'); }
+
+  // Swap a chip for a small editor in place. Saving is an explicit tap on
+  // “完成” (Enter does not submit); “取消” or Esc puts the chip back.
+  function editInline(host, value, placeholder, save) {
+    var editor = document.createElement('span');
+    editor.className = 'group-chip-editor';
+    editor.innerHTML = '<input class="group-chip-input" maxlength="80"><button class="group-chip-done" type="button">完成</button><button class="group-chip-cancel" type="button" aria-label="取消">×</button>';
+    var input = editor.querySelector('input'), done = editor.querySelector('.group-chip-done'), cancel = editor.querySelector('.group-chip-cancel');
+    input.value = value; input.placeholder = placeholder; input.setAttribute('aria-label', placeholder);
+    function sync() { var name = input.value.trim(); done.disabled = !name || name === value; }
+    function close() { editor.remove(); host.hidden = false; (host.querySelector('button') || host).focus({ preventScroll: true }); }
+    function setBusy(busy) { input.disabled = busy; cancel.disabled = busy; done.classList.toggle('is-loading', busy); if (busy) done.disabled = true; else sync(); }
+    input.addEventListener('input', sync);
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') event.preventDefault();
+      else if (event.key === 'Escape') { event.preventDefault(); close(); }
+    });
+    done.addEventListener('click', function () {
+      if (done.disabled) return;
+      setBusy(true);
+      save(input.value.trim()).then(function () { editor.remove(); host.hidden = false; }, function (error) { setBusy(false); toastError(error); input.focus(); });
+    });
+    cancel.addEventListener('click', close);
+    host.hidden = true; host.parentNode.insertBefore(editor, host);
+    sync(); input.focus(); input.select();
+    if (editor.scrollIntoView) editor.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  function makeChip(id, name) {
+    var wrap = document.createElement('span');
+    wrap.className = 'group-chip-wrap';
+    wrap.innerHTML = '<button class="group-chip" type="button" aria-pressed="false" title="双击重命名"><span class="group-chip-name"></span><span class="group-chip-count">0</span></button><button class="group-chip-more" type="button" aria-haspopup="menu">⋯</button>';
+    var chip = wrap.querySelector('.group-chip'), more = wrap.querySelector('.group-chip-more');
+    chip.setAttribute('data-group-filter', id); chip.setAttribute('data-rename-url', groupUrl(id, 'rename')); chip.setAttribute('data-delete-url', groupUrl(id, 'delete'));
+    wrap.querySelector('.group-chip-count').setAttribute('data-group-count', id);
+    more.setAttribute('data-group-more', id);
+    setGroupName(chip, name);
+    return wrap;
+  }
+  function setGroupName(chip, name) {
+    var id = chip.getAttribute('data-group-filter');
+    chip.setAttribute('data-group-name', name);
+    chip.querySelector('.group-chip-name').textContent = name;
+    chip.parentNode.querySelector('[data-group-more]').setAttribute('aria-label', '管理分组「' + name + '」');
+    document.querySelectorAll('[data-task-id]').forEach(function (card) {
+      if (card.getAttribute('data-group-id') === id) setText(card.querySelector('.js-group-name'), name);
+    });
+  }
+  function createGroup(add) {
+    editInline(add, '', '新分组名称', function (name) {
+      return postJSON(groupBar.getAttribute('data-create-url'), { name: name }).then(function (result) {
+        var id = String(result.group.id);
+        groupBar.insertBefore(makeChip(id, result.group.name), add);
+        window.AutoTaskUI.toast(result.message, 'ok');
+        applyGroup(id, true);
+      });
+    });
+  }
+  function renameGroup(chip) {
+    editInline(chip.closest('.group-chip-wrap'), chip.getAttribute('data-group-name'), '分组名称', function (name) {
+      return postJSON(chip.getAttribute('data-rename-url'), { name: name }).then(function (result) {
+        setGroupName(chip, result.group.name);
+        window.AutoTaskUI.toast(result.message, 'ok');
+        refreshCounts();
+      });
+    });
+  }
+  function deleteGroup(chip) {
+    var id = chip.getAttribute('data-group-filter');
+    var count = Number(chip.querySelector('[data-group-count]').textContent) || 0;
+    var message = '删除分组「' + chip.getAttribute('data-group-name') + '」？' + (count ? '其中的 ' + count + ' 个任务会移到未分组，任务本身不受影响。' : '');
+    window.AutoTaskUI.confirm(message).then(function (ok) {
+      if (!ok) return;
+      postJSON(chip.getAttribute('data-delete-url')).then(function (result) {
+        document.querySelectorAll('[data-task-id]').forEach(function (card) {
+          if (card.getAttribute('data-group-id') !== id) return;
+          card.setAttribute('data-group-id', 'ungrouped');
+          setText(card.querySelector('.js-group-name'), '未分组');
+        });
+        chip.closest('.group-chip-wrap').remove();
+        window.AutoTaskUI.toast(result.message, 'ok');
+        applyGroup(activeGroup === id ? 'ungrouped' : activeGroup, true);
+      }).catch(toastError);
+    });
+  }
+
+  failedButton.addEventListener('click', function () {
+    openMenu(failedButton, '最近一次运行失败', failedCards().map(function (card) {
+      return { label: card.querySelector('.task-name-cell strong').textContent + '  #' + card.getAttribute('data-task-id'), run: function () { revealCard(card); } };
+    }));
+  });
+  groupBar.addEventListener('click', function (event) {
+    var chip = event.target.closest('[data-group-filter]');
+    if (chip) { applyGroup(chip.getAttribute('data-group-filter'), true); return; }
+    var more = event.target.closest('[data-group-more]');
+    if (more) {
+      var target = groupChip(more.getAttribute('data-group-more'));
+      openMenu(more, target.getAttribute('data-group-name'), [
+        { label: '重命名', keepsFocus: true, run: function () { renameGroup(target); } },
+        { label: '删除分组', danger: true, run: function () { deleteGroup(target); } }
+      ]);
+      return;
+    }
+    var add = event.target.closest('[data-group-add]');
+    if (add) createGroup(add);
+  });
+  groupBar.addEventListener('dblclick', function (event) {
+    var chip = event.target.closest('[data-rename-url]');
+    if (chip) renameGroup(chip);
+  });
+
+  function moveTask(card, pill, key, name) {
+    if (card.getAttribute('data-group-id') === key) return;
+    pill.disabled = true;
+    postJSON(pill.getAttribute('data-move-url'), { group_id: key === 'ungrouped' ? '' : key }).then(function (result) {
+      card.setAttribute('data-group-id', key);
+      setText(pill.querySelector('.js-group-name'), name);
+      window.AutoTaskUI.toast(result.message || '已移至' + name, 'ok');
+      if (inActiveGroup(card)) { refreshCounts(); return; }
+      // Moved out of the group being viewed: let it slide away first.
+      card.style.height = card.offsetHeight + 'px';
+      card.classList.add('is-leaving');
+      refreshCounts();
+      window.setTimeout(function () { card.hidden = true; card.classList.remove('is-leaving'); card.style.height = ''; }, 320);
+    }).catch(toastError).then(function () { pill.disabled = false; });
+  }
+  document.querySelectorAll('.task-group-pill').forEach(function (pill) {
+    pill.addEventListener('click', function () {
+      var card = pill.closest('[data-task-id]'), current = card.getAttribute('data-group-id');
+      openMenu(pill, '移动到分组', groupChoices().map(function (group) {
+        return { label: group.name, checked: group.key === current, run: function () { moveTask(card, pill, group.key, group.name); } };
+      }));
+    });
+  });
+
+  var initialGroup = new URL(window.location.href).searchParams.get('group');
+  if (!initialGroup) { try { initialGroup = sessionStorage.getItem('autotask:task-group'); } catch (ignore) {} }
+  applyGroup(initialGroup || 'all', true);
+  window.addEventListener('resize', function () { refreshScriptMarquees(); moveIndicator(); }, { signal: pageSignal });
+  var pollTimer;
+  pageSignal.addEventListener('abort', function () { window.clearTimeout(pollTimer); });
+  (function poll() { pollTimer = window.setTimeout(function () { if (document.visibilityState === 'visible') refreshStatus().catch(function () {}); poll(); }, document.visibilityState === 'visible' ? 3000 : 10000); })();
+})();
+</script>
+{% endblock %}

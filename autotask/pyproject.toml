@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autotask"
+version = "2.1.0"
+description = "Automated recurring and one-off script scheduler with CLI and Web UI"
+requires-python = ">=3.9"
+dependencies = [
+    "Flask==3.1.3",
+    "croniter==2.0.7",
+    "PyYAML==6.0.2",
+]
+
+[project.scripts]
+autotask = "autotask.cli:main"
+autotaskd = "autotask.daemon:main"
+
+[tool.setuptools.packages.find]
+include = ["autotask*"]
+
+[tool.setuptools.package-data]
+autotask = ["templates/*.html", "static/*"]

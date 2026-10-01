@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}登录 - AutoTask{% endblock %}
+{% block body_class %}login-page{% endblock %}
+{% block content %}
+<div class="card login-card">
+  <div class="login-mascot" aria-hidden="true">
+    <svg viewBox="0 0 120 120">
+      <ellipse cx="60" cy="108" rx="30" ry="5" fill="#f3d9c9"/>
+      <line x1="60" y1="14" x2="60" y2="26" stroke="#df6b9d" stroke-width="4" stroke-linecap="round"/>
+      <circle class="login-mascot-bulb" cx="60" cy="12" r="7" fill="#ffc857"/>
+      <circle cx="60" cy="62" r="40" fill="#e96fa5"/>
+      <circle cx="60" cy="62" r="40" fill="url(#login-shine)"/>
+      <circle cx="60" cy="62" r="29" fill="#fff5fa"/>
+      <g class="login-mascot-eyes"><circle cx="49" cy="58" r="4" fill="#49323e"/><circle cx="71" cy="58" r="4" fill="#49323e"/></g>
+      <ellipse cx="42" cy="68" rx="5" ry="3" fill="#ff8a8a" opacity=".5"/>
+      <ellipse cx="78" cy="68" rx="5" ry="3" fill="#ff8a8a" opacity=".5"/>
+      <path d="M54 70q6 5 12 0" stroke="#49323e" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="22" cy="72" r="7" fill="#e96fa5"/>
+      <circle cx="98" cy="72" r="7" fill="#e96fa5"/>
+      <defs><radialGradient id="login-shine" cx=".3" cy=".25" r=".7"><stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
+    </svg>
+  </div>
+  <h2>登录</h2>
+  <form method="post">
+    <label for="login-password">密码</label>
+    <input id="login-password" type="password" name="password" autofocus required>
+    <div class="login-actions">
+      <button class="btn btn-primary" type="submit">登录</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

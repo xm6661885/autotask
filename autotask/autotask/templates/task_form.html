@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑任务' if task else '新建任务' }} - AutoTask{% endblock %}
+{% block body_class %}task-form-page{% endblock %}
+{% block content %}
+{% if scripts is mapping %}
+  {% set recurring_scripts = scripts.get('recurring', []) %}
+  {% set one_off_scripts = scripts.get('one_off', []) %}
+{% else %}
+  {% set recurring_scripts = scripts|default([]) %}
+  {% set one_off_scripts = scripts|default([]) %}
+{% endif %}
+{% set default_kind = task.task_kind if task and task.task_kind else request.args.get('task_kind', 'recurring') %}
+{% if default_kind not in ['recurring', 'one_off'] %}{% set default_kind = 'recurring' %}{% endif %}
+{% set current_schedule = task.schedule_type if task and task.schedule_type != 'once' else 'manual' %}
+{% set current_trigger = task.one_off_trigger if task and task.one_off_trigger else 'immediate' %}
+
+<div class="form-page-heading">
+  <a class="back-link" data-restore-dashboard-scroll href="{{ url_for('index') }}#{{ 'one-off' if default_kind == 'one_off' else 'recurring' }}">← 返回任务中心</a>
+  <h1>{{ '编辑任务' if task else '新建任务' }}</h1>
+  <p>{{ '更新任务的脚本、说明和执行方式。' if task else '先选择任务类型，再填写脚本与执行计划。' }}</p>
+</div>
+
+<form method="post" class="task-form" id="task-form">
+  <section class="form-section task-kind-section" aria-labelledby="task-kind-title">
+    <div class="form-section-title">
+      <h2 id="task-kind-title">任务类型</h2>
+      <p>重复任务会持续保留并按计划运行；一次性任务只会执行一遍。</p>
+    </div>
+    <div class="task-kind-picker" role="radiogroup" aria-label="任务类型">
+      <label class="task-kind-option {{ 'is-selected' if default_kind == 'recurring' else '' }}">
+        <input class="task-kind-input" type="radio" name="task_kind" value="recurring" {% if default_kind == 'recurring' %}checked{% endif %}>
+        <span class="task-kind-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.9M4 13a8 8 0 0 0 14.3 4.9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M5 3v4h4M19 21v-4h-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="task-kind-text"><strong>重复任务</strong><small>Cron、固定间隔、Webhook 或手动反复执行</small></span>
+        <span class="task-kind-check" aria-hidden="true"></span>
+      </label>
+      <label class="task-kind-option {{ 'is-selected' if default_kind == 'one_off' else '' }}">
+        <input class="task-kind-input" type="radio" name="task_kind" value="one_off" {% if default_kind == 'one_off' %}checked{% endif %}>
+        <span class="task-kind-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2.8l2.2 5.4 5.8.5-4.4 3.8 1.4 5.7L12 15.2l-5 3 1.4-5.7L4 8.7l5.8-.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></span>
+        <span class="task-kind-text"><strong>一次性任务</strong><small>立即启动或在指定时间只执行一次</small></span>
+        <span class="task-kind-check" aria-hidden="true"></span>
+      </label>
+    </div>
+  </section>
+
+  <section class="form-section" aria-labelledby="basic-title">
+    <div class="form-section-title"><h2 id="basic-title">基本信息</h2><p>名称用于识别任务；说明会显示在任务中心。</p></div>
+    <div class="form-grid">
+      <div class="form-field form-field-wide">
+        <label for="task-name">任务名称 <span class="required-mark">*</span></label>
+        <input id="task-name" type="text" name="name" required maxlength="120" autocomplete="off" placeholder="例如：每日天气推送" value="{{ task.name if task else '' }}">
+      </div>
+      <div class="form-field form-field-wide">
+        <label for="task-description">任务说明</label>
+        <textarea id="task-description" name="description" rows="3" maxlength="1000" placeholder="简要说明它做什么、何时需要关注……">{{ task.description if task and task.description else '' }}</textarea>
+        <p class="field-hint">可留空；最多 1000 个字符。</p>
+      </div>
+      <div class="form-field form-field-wide">
+        <label for="task-script">脚本文件 <span class="required-mark">*</span></label>
+        <select id="task-script" name="script" required>
+          <option value="" data-script-kind="all">-- 选择脚本 --</option>
+          {% if recurring_scripts %}
+          <optgroup label="重复任务脚本" data-script-group="recurring">
+            {% for s in recurring_scripts %}<option value="{{ s }}" data-script-kind="recurring" {% if task and task.script == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+          </optgroup>
+          {% endif %}
+          {% if one_off_scripts %}
+          <optgroup label="一次性任务脚本" data-script-group="one_off">
+            {% for s in one_off_scripts %}<option value="{{ s }}" data-script-kind="one_off" {% if task and task.script == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+          </optgroup>
+          {% endif %}
+        </select>
+        <p class="field-hint"><span class="js-script-directory">{{ 'scripts/cron/' if default_kind == 'recurring' else 'scripts/once/' }}</span> 下的脚本会自动列在这里。</p>
+      </div>
+      <div class="form-field form-field-wide">
+        <label for="task-args">命令行参数</label>
+        <input id="task-args" type="text" name="args" placeholder='JSON 数组，例如 ["--foo", "bar"]' value="{{ task.args_str if task else '' }}">
+        <p class="field-hint">可留空。参数会原样传给脚本。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="form-section" id="recurring-fields" aria-labelledby="recurring-title">
+    <div class="form-section-title"><h2 id="recurring-title">重复执行计划</h2><p>选择任务自动触发的方式；手动和 Webhook 不需要填写调度值。</p></div>
+    <div class="form-grid">
+      <div class="form-field form-field-wide">
+        <span class="field-label" id="schedule-type-label">调度方式</span>
+        <div class="schedule-type-picker" id="schedule-type" role="radiogroup" aria-labelledby="schedule-type-label">
+          {% for value, label in [('manual', '手动（不自动运行）'), ('cron', 'Cron 表达式'), ('interval', '固定间隔'), ('webhook', 'Webhook（HTTP 触发）')] %}
+          <label class="schedule-chip schedule-chip-{{ value }}"><input type="radio" name="schedule_type" value="{{ value }}" {% if current_schedule == value %}checked{% endif %}><span>{{ label }}</span></label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="form-field form-field-wide" id="schedule-value-field">
+        <label id="schedule-value-label" for="schedule-value">调度值</label>
+        <input type="text" name="schedule_value" id="schedule-value" value="{{ task.schedule_value if task and task.schedule_type != 'once' else '' }}">
+        <p class="field-hint" id="schedule-value-hint"></p>
+      </div>
+    </div>
+    <div id="cron-help" class="cron-help" hidden>
+      <p><strong>Cron 使用 5 个字段：</strong>分钟、小时、日、月、星期；按系统时区 <code>{{ system_timezone }}</code> 计算。</p>
+      <div class="cron-examples" aria-label="Cron 常用示例">
+        <button type="button" class="cron-example" data-cron="*/5 * * * *"><code>*/5 * * * *</code><span>每 5 分钟</span></button>
+        <button type="button" class="cron-example" data-cron="0 9 * * *"><code>0 9 * * *</code><span>每天 09:00</span></button>
+        <button type="button" class="cron-example" data-cron="30 8 * * 1-5"><code>30 8 * * 1-5</code><span>工作日 08:30</span></button>
+        <button type="button" class="cron-example" data-cron="0 0 1 * *"><code>0 0 1 * *</code><span>每月 1 日 00:00</span></button>
+      </div>
+      <p class="cron-syntax"><code>*</code> 任意值　<code>,</code> 多个值　<code>-</code> 范围　<code>/</code> 步长</p>
+    </div>
+    <label class="switch-field" id="enabled-field">
+      <input class="switch-input" type="checkbox" name="enabled" {% if not task or task.enabled %}checked{% endif %}>
+      <span><strong>启用调度</strong><small>保存后按上方计划自动运行。</small></span>
+    </label>
+  </section>
+
+  <section class="form-section" id="one-off-fields" aria-labelledby="one-off-title" {% if default_kind != 'one_off' %}hidden{% endif %}>
+    <div class="form-section-title"><h2 id="one-off-title">一次性执行计划</h2><p>一次性任务完成、失败或取消后不会再次自动运行。</p></div>
+    <div class="one-off-picker" role="radiogroup" aria-label="一次性执行方式">
+      <label class="one-off-option">
+        <input type="radio" name="one_off_trigger" value="immediate" {% if current_trigger == 'immediate' %}checked{% endif %}>
+        <span class="one-off-radio" aria-hidden="true"></span>
+        <span><strong>创建后立即执行</strong><small>适合长时间运行的临时作业；保存后后台立即启动。</small></span>
+      </label>
+      <label class="one-off-option">
+        <input type="radio" name="one_off_trigger" value="scheduled" {% if current_trigger == 'scheduled' %}checked{% endif %}>
+        <span class="one-off-radio" aria-hidden="true"></span>
+        <span><strong>指定时间执行</strong><small>到达计划时间后启动一次，保留运行记录。</small></span>
+      </label>
+    </div>
+    <div class="form-field scheduled-at-field" id="scheduled-at-field">
+      <label for="scheduled-at">执行时间 <span class="required-mark">*</span></label>
+      <input type="datetime-local" name="scheduled_at_local" id="scheduled-at" value="{{ task.scheduled_at_local if task and task.scheduled_at_local else '' }}">
+      <p class="field-hint">按服务系统时区 <span class="mono">{{ system_timezone }}</span> 解析。请填写未来时间。</p>
+    </div>
+  </section>
+
+  <div class="form-actions">
+    <button class="btn btn-primary btn-save" type="submit">{{ '保存修改' if task else '创建任务' }}</button>
+    <a class="btn" data-restore-dashboard-scroll href="{{ url_for('index') }}#{{ 'one-off' if default_kind == 'one_off' else 'recurring' }}">取消</a>
+  </div>
+</form>
+
+<script>
+(function () {
+  var kindInputs = Array.prototype.slice.call(document.querySelectorAll('.task-kind-input'));
+  var recurringFields = document.getElementById('recurring-fields');
+  var oneOffFields = document.getElementById('one-off-fields');
+  var scheduleTypeInputs = Array.prototype.slice.call(document.querySelectorAll('input[name="schedule_type"]'));
+  var scheduleValueField = document.getElementById('schedule-value-field');
+  var scheduleValue = document.getElementById('schedule-value');
+  var scheduleHint = document.getElementById('schedule-value-hint');
+  var cronHelp = document.getElementById('cron-help');
+  var enabled = document.querySelector('#enabled-field input');
+  var oneOffInputs = Array.prototype.slice.call(document.querySelectorAll('input[name="one_off_trigger"]'));
+  var scheduledAt = document.getElementById('scheduled-at');
+  var script = document.getElementById('task-script');
+  var scriptDirectory = document.querySelector('.js-script-directory');
+
+  function selectedKind() {
+    var checked = document.querySelector('.task-kind-input:checked');
+    return checked ? checked.value : 'recurring';
+  }
+  function selectedTrigger() {
+    var checked = document.querySelector('input[name="one_off_trigger"]:checked');
+    return checked ? checked.value : 'immediate';
+  }
+  function updateScriptOptions(kind) {
+    Array.prototype.slice.call(script.options).forEach(function (option) {
+      var optionKind = option.getAttribute('data-script-kind') || 'all';
+      var available = optionKind === 'all' || optionKind === kind;
+      option.hidden = !available;
+      option.disabled = !available;
+    });
+    Array.prototype.slice.call(script.querySelectorAll('optgroup[data-script-group]')).forEach(function (group) {
+      group.hidden = group.getAttribute('data-script-group') !== kind;
+    });
+    if (script.selectedOptions.length && script.selectedOptions[0].disabled) script.value = '';
+    if (scriptDirectory) scriptDirectory.textContent = kind === 'one_off' ? 'scripts/once/' : 'scripts/cron/';
+  }
+  function selectedSchedule() {
+    var checked = document.querySelector('input[name="schedule_type"]:checked');
+    return checked ? checked.value : 'manual';
+  }
+  function updateRecurringSchedule() {
+    var active = selectedKind() === 'recurring';
+    var type = selectedSchedule();
+    var needsValue = active && (type === 'cron' || type === 'interval');
+    scheduleValue.disabled = !needsValue;
+    scheduleValue.required = needsValue;
+    scheduleValueField.classList.toggle('is-idle', !needsValue);
+    scheduleTypeInputs.forEach(function (input) { input.disabled = !active; });
+    enabled.disabled = !active;
+    if (type === 'cron') {
+      scheduleValue.placeholder = '例如：*/5 * * * *';
+      scheduleHint.textContent = '标准 5 段 Cron 表达式。';
+      cronHelp.hidden = !active;
+    } else if (type === 'interval') {
+      scheduleValue.placeholder = '例如：3600';
+      scheduleHint.textContent = '单位为秒，例如 3600 表示每小时一次。';
+      cronHelp.hidden = true;
+    } else if (type === 'webhook') {
+      scheduleValue.placeholder = 'Webhook 模式无需填写';
+      scheduleHint.textContent = '收到合法的 HTTP Webhook 请求时运行。';
+      cronHelp.hidden = true;
+    } else {
+      scheduleValue.placeholder = '手动模式无需填写';
+      scheduleHint.textContent = '仅从任务中心或命令行手动启动。';
+      cronHelp.hidden = true;
+    }
+  }
+  function updateOneOffFields() {
+    var active = selectedKind() === 'one_off';
+    var scheduled = active && selectedTrigger() === 'scheduled';
+    oneOffInputs.forEach(function (input) { input.disabled = !active; });
+    scheduledAt.disabled = !scheduled;
+    scheduledAt.required = scheduled;
+    document.getElementById('scheduled-at-field').hidden = !scheduled;
+  }
+  function updateKind() {
+    var kind = selectedKind();
+    kindInputs.forEach(function (input) { input.closest('.task-kind-option').classList.toggle('is-selected', input.checked); });
+    recurringFields.hidden = kind !== 'recurring';
+    oneOffFields.hidden = kind !== 'one_off';
+    updateScriptOptions(kind);
+    updateRecurringSchedule();
+    updateOneOffFields();
+  }
+  kindInputs.forEach(function (input) { input.addEventListener('change', updateKind); });
+  oneOffInputs.forEach(function (input) { input.addEventListener('change', updateOneOffFields); });
+  scheduleTypeInputs.forEach(function (input) { input.addEventListener('change', updateRecurringSchedule); });
+  Array.prototype.slice.call(document.querySelectorAll('.cron-example')).forEach(function (example) {
+    example.addEventListener('click', function () {
+      scheduleValue.value = example.getAttribute('data-cron');
+      scheduleValue.focus();
+      scheduleValue.classList.remove('is-filled'); void scheduleValue.offsetWidth; scheduleValue.classList.add('is-filled');
+    });
+  });
+  document.getElementById('task-form').addEventListener('submit', function (event) {
+    if (event.defaultPrevented) return;
+    var save = this.querySelector('.btn-save');
+    window.setTimeout(function () { save.disabled = true; save.classList.add('is-loading'); }, 0);
+  });
+  updateKind();
+})();
+</script>
+{% endblock %}
