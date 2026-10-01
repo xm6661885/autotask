@@ -2,7 +2,7 @@
 name: autotask
 description: 通过 autotask CLI 创建、管理和执行重复任务或一次性后台任务（Python/Shell）。当用户提到 cron 定时、固定间隔、在指定时间只运行一次、立即在后台启动耗时任务、创建自动化脚本、查看任务状态或运行日志时使用。也用于将已有脚本注册为可调度任务。
 author: AutoTask
-version: "2.1.0"
+version: "2.1.1"
 tags:
   - automation
   - cron

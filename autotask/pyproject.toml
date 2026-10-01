@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autotask"
-version = "2.1.0"
+version = "2.1.1"
 description = "Automated recurring and one-off script scheduler with CLI and Web UI"
 requires-python = ">=3.9"
 dependencies = [
