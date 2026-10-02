@@ -259,7 +259,7 @@ exec codex exec \
 PROMPT
 ~~~
 
-使用 exec 使脚本退出码直接成为 AutoTask 的运行结果。后台代理没有对话式前台；需要报告完成、失败、登录阻塞或人工决策时，在 prompt 中要求调用 notify（默认带 `-C telegram_push` 只推 Telegram；不带 `--channel` 会推送到全部渠道，含 QQ 群）。不要把 Cookie、密码、验证码、支付 token 或其他秘密写到脚本、参数或日志里。
+使用 exec 使脚本退出码直接成为 AutoTask 的运行结果。后台代理没有对话式前台；需要报告完成、失败、登录阻塞或人工决策时，在 prompt 中要求调用 notify。不要把 Cookie、密码、验证码、支付 token 或其他秘密写到脚本、参数或日志里。
 
 ## 安全与运维
 
