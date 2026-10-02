@@ -221,7 +221,7 @@ PROMPT
 - -C 必须为绝对路径；不要依赖旧 scripts 根目录作为工作目录。
 - 使用 exec 把退出码传回 AutoTask，正确标记一次性任务成功或失败。
 - 不要将密码、Cookie、验证码、支付 token 或其他秘密写进脚本、prompt、任务参数或日志。
-- 后台 codex exec 没有交互式前台；需要通知完成、失败或登录阻塞时，在 prompt 中要求使用 notify。
+- 后台 codex exec 没有交互式前台；需要通知完成、失败或登录阻塞时，在 prompt 中要求使用 notify（默认带 `-C telegram_push` 只推 Telegram；不带 `--channel` 会推送到全部渠道，含 QQ 群）。
 - 修改脚本后可先运行 bash -n <脚本绝对路径>；除非用户明确要求，不能为了测试而启动有外部副作用的任务。
 
 ## 排查与安全
